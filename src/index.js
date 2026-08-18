@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { renderMilestone } from './render/renderer.js';
+import { renderGif } from './animation/gif.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
@@ -20,16 +20,6 @@ if (!Number.isInteger(servers) || servers < 0 || servers > 100) {
 }
 
 await fs.mkdir(outputDir, { recursive: true });
-
-const celebration = servers === 100;
-const canvas = renderMilestone({
-  servers,
-  time: celebration ? 2400 : 1600,
-  celebration
-});
-
-const filename = celebration ? 'milestone-100.png' : `milestone-${servers}.png`;
-const destination = path.join(outputDir, filename);
-await fs.writeFile(destination, canvas.toBuffer('image/png'));
-
-console.log(`Generated ${destination}`);
+const output = path.join(outputDir, servers === 100 ? 'bozos-100-celebration.gif' : `bozos-${servers}.gif`);
+await renderGif({ servers, celebration: servers === 100, output });
+console.log(`Generated ${output}`);
