@@ -15,7 +15,6 @@ async function readState() {
 
 async function writeState(state) {
   await fs.mkdir(path.dirname(statePath), { recursive: true });
-  // Runtime state is intentionally not committed to Git.
   await fs.writeFile(statePath, JSON.stringify(state, null, 2));
 }
 
@@ -49,7 +48,8 @@ async function tick(state) {
     ? config.testServers
     : await fetchServerCount(config.token);
 
-  if (count >= TARGET && state.celebrated && state.messageId) return state;
+  // Once 100 has been unlocked, it remains unlocked even if the live count later drops.
+  if (state.celebrated) return state;
   if (state.lastCount === count && state.messageId) return state;
 
   console.log(`Bozos TTS server count: ${count}`);
