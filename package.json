@@ -1,6 +1,6 @@
 {
   "name": "bozos-tts-milestones",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "private": true,
   "description": "The Bozos TTS 100-server animated milestone.",
   "type": "module",
@@ -8,7 +8,7 @@
     "preview:98": "node src/index.js --state=98",
     "preview:99": "node src/index.js --state=99",
     "preview:100": "node src/index.js --state=100",
-    "start": "node src/service.js"
+    "start": "node src/bootstrap.js"
   },
   "engines": {
     "node": ">=20"
