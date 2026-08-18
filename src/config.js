@@ -1,7 +1,7 @@
 import 'dotenv/config';
 
-export const WIDTH = 960;
-export const HEIGHT = 540;
+export const WIDTH = 1280;
+export const HEIGHT = 720;
 export const FPS = 12;
 export const TARGET = 100;
 
