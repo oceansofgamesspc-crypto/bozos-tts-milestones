@@ -1,12 +1,11 @@
 import 'dotenv/config';
 
-// The artwork is authored on a 1280x720 design grid, then rendered to a
-// Discord-friendly 16:9 canvas. This keeps the visual proportions intact
-// while dramatically reducing animated GIF size.
-export const DESIGN_WIDTH = 1280;
-export const DESIGN_HEIGHT = 720;
-export const WIDTH = 854;
-export const HEIGHT = 480;
+// Keep the authored design grid intact; animation/gif.js downsizes frames
+// before encoding so Discord receives a compact 16:9 asset.
+export const WIDTH = 1280;
+export const HEIGHT = 720;
+export const OUTPUT_WIDTH = 854;
+export const OUTPUT_HEIGHT = 480;
 export const FPS = 8;
 export const TARGET = 100;
 export const MAX_UPLOAD_BYTES = 9_000_000;
