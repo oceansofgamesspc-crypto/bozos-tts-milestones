@@ -18,19 +18,19 @@ async function writeState(state) {
   await fs.writeFile(statePath, JSON.stringify(state, null, 2));
 }
 
-async function buildGif(count) {
-  const output = path.join(root, 'output', count >= TARGET ? 'milestone-100.gif' : 'milestone-live.gif');
+async function buildAnimation(count) {
+  const output = path.join(root, 'output', count >= TARGET ? 'milestone-100.webp' : 'milestone-live.webp');
   await fs.mkdir(path.dirname(output), { recursive: true });
   await renderGif({ servers: Math.min(count, TARGET), celebration: count >= TARGET, output });
   return fs.readFile(output);
 }
 
 async function publishCount(count, messageId) {
-  const buffer = await buildGif(count);
-  const filename = count >= TARGET ? 'bozos-100.gif' : 'bozos-road-to-100.gif';
+  const buffer = await buildAnimation(count);
+  const filename = count >= TARGET ? 'bozos-100.webp' : 'bozos-road-to-100.webp';
   const content = count >= TARGET
-    ? '🏆 **BOZOS TTS HAS REACHED 100 SERVERS!** 💜'
-    : `🤖 **BOZOS TTS — ROAD TO 100** • ${count}/100 servers`;
+    ? 'BOZOS TTS HAS REACHED 100 SERVERS!'
+    : `BOZOS TTS - ROAD TO 100 - ${count}/100 servers`;
 
   if (messageId) {
     await editMessage({ token: config.token, channelId: config.channelId, messageId, buffer, filename, content });
@@ -48,7 +48,7 @@ async function tick(state) {
     ? config.testServers
     : await fetchServerCount(config.token);
 
-  // Once 100 has been unlocked, it remains unlocked even if the live count later drops.
+  // A prior 100 celebration is permanent. Before 100, always keep the live board current.
   if (state.celebrated) return state;
   if (state.lastCount === count && state.messageId) return state;
 
