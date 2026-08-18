@@ -1,7 +1,7 @@
 import 'dotenv/config';
 
-export const WIDTH = 1280;
-export const HEIGHT = 720;
+export const WIDTH = 960;
+export const HEIGHT = 540;
 export const FPS = 12;
 export const TARGET = 100;
 
@@ -22,7 +22,6 @@ export const COLORS = {
 
 export const config = {
   token: process.env.DISCORD_TOKEN || '',
-  // The server ID is intentionally an environment variable for Railway.
   guildId: process.env.MILESTONE_GUILD_ID || '',
   channelId: process.env.MILESTONE_CHANNEL_ID || '',
   messageId: process.env.MILESTONE_MESSAGE_ID || '',
