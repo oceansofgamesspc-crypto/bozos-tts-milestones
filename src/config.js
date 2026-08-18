@@ -6,7 +6,6 @@ export const DESIGN_WIDTH = 1280;
 export const DESIGN_HEIGHT = 720;
 export const WIDTH = 1280;
 export const HEIGHT = 720;
-// Compatibility aliases for the animation encoder.
 export const OUTPUT_WIDTH = WIDTH;
 export const OUTPUT_HEIGHT = HEIGHT;
 export const FPS = 8;
@@ -35,7 +34,8 @@ export const config = {
   guildId: process.env.MILESTONE_GUILD_ID || '',
   channelId: process.env.MILESTONE_CHANNEL_ID || '',
   messageId: process.env.MILESTONE_MESSAGE_ID || '',
-  refreshMs: Number(process.env.REFRESH_INTERVAL_MS || 300000),
+  // One-minute polling keeps the milestone live without hammering Discord.
+  refreshMs: Math.max(15000, Number(process.env.REFRESH_INTERVAL_MS || 60000)),
   testServers: process.env.TEST_SERVERS ? Number(process.env.TEST_SERVERS) : null,
   testMode: process.env.TEST_MODE === 'true'
 };
