@@ -5,21 +5,20 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
 COPY package*.json ./
 RUN npm install --omit=dev
-
 COPY . .
 
-# The renderer registers these exact paths. Copy the Debian Roboto TTFs into
-# the project so Canvas does not depend on the npm package's font layout.
+# Canvas uses a deterministic, project-local font path. Debian's font package
+# layout can vary, so locate the TTFs instead of hard-coding a distro path.
 RUN mkdir -p /app/node_modules/roboto-fontface/fonts/roboto \
-  && cp /usr/share/fonts/truetype/roboto/unhinted/RobotoTTF/Roboto-Regular.ttf /app/node_modules/roboto-fontface/fonts/roboto/Roboto-Regular.ttf \
-  && cp /usr/share/fonts/truetype/roboto/unhinted/RobotoTTF/Roboto-Medium.ttf /app/node_modules/roboto-fontface/fonts/roboto/Roboto-Medium.ttf \
-  && cp /usr/share/fonts/truetype/roboto/unhinted/RobotoTTF/Roboto-Bold.ttf /app/node_modules/roboto-fontface/fonts/roboto/Roboto-Bold.ttf \
-  && cp /usr/share/fonts/truetype/roboto/unhinted/RobotoTTF/Roboto-Black.ttf /app/node_modules/roboto-fontface/fonts/roboto/Roboto-Black.ttf \
+  && find /usr/share/fonts -type f -name 'Roboto-Regular.ttf' -exec cp {} /app/node_modules/roboto-fontface/fonts/roboto/Roboto-Regular.ttf \; -quit \
+  && find /usr/share/fonts -type f -name 'Roboto-Medium.ttf' -exec cp {} /app/node_modules/roboto-fontface/fonts/roboto/Roboto-Medium.ttf \; -quit \
+  && find /usr/share/fonts -type f -name 'Roboto-Bold.ttf' -exec cp {} /app/node_modules/roboto-fontface/fonts/roboto/Roboto-Bold.ttf \; -quit \
+  && find /usr/share/fonts -type f -name 'Roboto-Black.ttf' -exec cp {} /app/node_modules/roboto-fontface/fonts/roboto/Roboto-Black.ttf \; -quit \
+  && test -s /app/node_modules/roboto-fontface/fonts/roboto/Roboto-Regular.ttf \
+  && test -s /app/node_modules/roboto-fontface/fonts/roboto/Roboto-Bold.ttf \
   && fc-cache -f
 
 ENV NODE_ENV=production
-
 CMD ["npm", "start"]
