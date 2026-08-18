@@ -1,9 +1,10 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Client, Events, GatewayIntentBits } from 'discord.js';
 import { config, TARGET, DISCORD_BADGE_EMOJI, assertDiscordConfig } from '../config.js';
 import { renderGif } from '../animation/gif.js';
-import { createMessage, editMessage, fetchServerCount, verifyChannel } from './publisher.js';
+import { createMessage, editMessage, verifyChannel } from './publisher.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const statePath = path.join(root, 'data', 'state.json');
@@ -44,13 +45,17 @@ async function publishCount(count, messageId) {
   return message.id;
 }
 
-async function tick(state) {
+function currentGuildCount(client) {
+  return client.guilds.cache.size;
+}
+
+async function tick(state, client, reason = 'heartbeat') {
   const checkedAt = new Date().toISOString();
   const count = config.testMode && Number.isInteger(config.testServers)
     ? config.testServers
-    : await fetchServerCount(config.token);
+    : currentGuildCount(client);
 
-  console.log(`[poll] ${checkedAt} | Discord server count = ${count} | previous = ${state.lastCount ?? 'none'}`);
+  console.log(`[poll:${reason}] ${checkedAt} | Discord gateway guild count = ${count} | previous = ${state.lastCount ?? 'none'}`);
 
   // A prior 100 celebration is permanent. Before 100, always keep the live board current.
   if (state.celebrated) return state;
@@ -68,20 +73,58 @@ assertDiscordConfig();
 await verifyChannel({ token: config.token, guildId: config.guildId, channelId: config.channelId });
 let state = await readState();
 
-console.log('Bozos TTS 100-server milestone service online.');
-await tick(state);
+const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+let updateChain = Promise.resolve();
 
-// Use a self-scheduling loop instead of setInterval. If Discord or rendering ever
-// takes longer than expected, polls cannot overlap and one failed poll cannot
-// silently kill the update loop.
-async function pollLoop() {
-  try {
-    state = await tick(state);
-  } catch (error) {
-    console.error('[milestone] Poll failed:', error);
-  } finally {
-    setTimeout(pollLoop, config.refreshMs);
-  }
+function queueUpdate(reason) {
+  updateChain = updateChain
+    .then(async () => {
+      state = await tick(state, client, reason);
+    })
+    .catch((error) => {
+      console.error(`[milestone] Update failed (${reason}):`, error);
+    });
+  return updateChain;
 }
 
-setTimeout(pollLoop, config.refreshMs);
+client.once(Events.ClientReady, async (readyClient) => {
+  console.log(`Discord gateway ready as ${readyClient.user.tag}.`);
+  console.log(`Discord gateway currently reports ${readyClient.guilds.cache.size} servers.`);
+  await queueUpdate('ready');
+});
+
+// These are the important events: unlike polling an HTTP endpoint, Discord tells
+// us immediately when the bot joins or leaves a guild. This keeps the milestone
+// board synchronized with the actual bot membership count.
+client.on(Events.GuildCreate, (guild) => {
+  console.log(`[gateway] Joined server: ${guild.name} (${guild.id}). Cache now has ${client.guilds.cache.size} servers.`);
+  queueUpdate('guildCreate');
+});
+
+client.on(Events.GuildDelete, (guild) => {
+  console.log(`[gateway] Left server: ${guild.name} (${guild.id}). Cache now has ${client.guilds.cache.size} servers.`);
+  queueUpdate('guildDelete');
+});
+
+client.on(Events.Error, (error) => {
+  console.error('[discord] Gateway error:', error);
+});
+
+client.on(Events.ShardError, (error) => {
+  console.error('[discord] Shard error:', error);
+});
+
+console.log('Bozos TTS 100-server milestone service online.');
+
+if (config.testMode && Number.isInteger(config.testServers)) {
+  await client.login(config.token);
+  await queueUpdate('test');
+} else {
+  await client.login(config.token);
+}
+
+// Heartbeat/reconciliation. Gateway events are the primary mechanism; this is a
+// safety net in case an event is missed during a reconnect or process hiccup.
+setInterval(() => {
+  queueUpdate('heartbeat');
+}, config.refreshMs);
