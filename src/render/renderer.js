@@ -1,269 +1,241 @@
-import { createCanvas } from 'canvas';
-import { WIDTH, HEIGHT, COLORS, MILESTONE } from '../config.js';
+import { createCanvas, loadImage } from 'canvas';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { WIDTH, HEIGHT, COLORS, TARGET } from '../config.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const LOGO = path.resolve(__dirname, '../../assets/logo/bozos-tts.png');
+const TAU = Math.PI * 2;
+
+function rgba(hex, alpha = 1) {
+  const n = hex.replace('#', '');
+  return `rgba(${parseInt(n.slice(0, 2), 16)},${parseInt(n.slice(2, 4), 16)},${parseInt(n.slice(4, 6), 16)},${alpha})`;
+}
+
+function glow(ctx, color, blur) {
+  ctx.shadowColor = color;
+  ctx.shadowBlur = blur;
+}
+
+function text(ctx, value, x, y, size, color, align = 'center', weight = '700') {
+  ctx.save();
+  ctx.font = `${weight} ${size}px Arial`;
+  ctx.textAlign = align;
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = color;
+  ctx.fillText(value, x, y);
+  ctx.restore();
+}
 
 function roundedRect(ctx, x, y, w, h, r) {
   ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
+  ctx.roundRect(x, y, w, h, r);
 }
 
-function glowText(ctx, text, x, y, size, color, align = 'center') {
-  ctx.save();
-  ctx.textAlign = align;
-  ctx.textBaseline = 'middle';
-  ctx.font = `800 ${size}px Arial`;
-  ctx.shadowBlur = 22;
-  ctx.shadowColor = color;
-  ctx.fillStyle = color;
-  ctx.fillText(text, x, y);
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = COLORS.white;
-  ctx.globalAlpha = 0.9;
-  ctx.fillText(text, x, y);
-  ctx.restore();
-}
-
-function drawBackground(ctx, time) {
-  const bg = ctx.createRadialGradient(WIDTH * 0.48, HEIGHT * 0.46, 40, WIDTH * 0.48, HEIGHT * 0.46, 760);
-  bg.addColorStop(0, '#17102c');
-  bg.addColorStop(0.45, '#090b17');
-  bg.addColorStop(1, COLORS.background);
-  ctx.fillStyle = bg;
+function drawBackground(ctx, t) {
+  const g = ctx.createRadialGradient(570, 360, 20, 570, 360, 820);
+  g.addColorStop(0, '#14142c');
+  g.addColorStop(0.42, '#080b16');
+  g.addColorStop(1, '#020308');
+  ctx.fillStyle = g;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
   ctx.save();
-  ctx.globalAlpha = 0.22;
-  ctx.strokeStyle = COLORS.violet;
+  ctx.globalAlpha = 0.10;
+  ctx.strokeStyle = COLORS.cyan;
   ctx.lineWidth = 1;
-  for (let x = -HEIGHT; x < WIDTH + HEIGHT; x += 54) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x + HEIGHT, HEIGHT);
-    ctx.stroke();
+  const drift = (t * 0.018) % 80;
+  for (let x = -80 + drift; x < WIDTH + 100; x += 80) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x - 180, HEIGHT); ctx.stroke();
+  }
+  for (let y = 0; y < HEIGHT; y += 48) {
+    ctx.beginPath(); ctx.moveTo(0, y + ((t * 0.012) % 48)); ctx.lineTo(WIDTH, y + ((t * 0.012) % 48)); ctx.stroke();
   }
   ctx.restore();
 
-  // Slow ambient scan.
-  const scanY = (time * 0.025) % HEIGHT;
-  const scan = ctx.createLinearGradient(0, scanY - 30, 0, scanY + 30);
+  for (let i = 0; i < 75; i++) {
+    const seed = i * 17.31;
+    const x = (seed * 83.7) % WIDTH;
+    const y = (seed * 47.9) % HEIGHT;
+    const phase = t * 0.00045 + i * 0.71;
+    ctx.fillStyle = i % 3 ? rgba(COLORS.purple, 0.18 + 0.18 * (0.5 + 0.5 * Math.sin(phase))) : rgba(COLORS.cyan, 0.22);
+    ctx.fillRect(x + Math.sin(phase) * 13, y + Math.cos(phase * 0.73) * 8, 2, 2);
+  }
+
+  const scanY = (t * 0.03) % HEIGHT;
+  const scan = ctx.createLinearGradient(0, scanY - 35, 0, scanY + 35);
   scan.addColorStop(0, 'rgba(168,85,247,0)');
-  scan.addColorStop(0.5, 'rgba(168,85,247,0.10)');
+  scan.addColorStop(0.5, 'rgba(168,85,247,0.07)');
   scan.addColorStop(1, 'rgba(34,211,238,0)');
   ctx.fillStyle = scan;
-  ctx.fillRect(0, scanY - 30, WIDTH, 60);
+  ctx.fillRect(0, scanY - 35, WIDTH, 70);
 }
 
-function drawPanel(ctx, x, y, w, h) {
+function drawFrame(ctx, t) {
   ctx.save();
-  roundedRect(ctx, x, y, w, h, 24);
-  ctx.fillStyle = COLORS.panel;
-  ctx.fill();
-  ctx.strokeStyle = '#2d2560';
-  ctx.lineWidth = 2;
-  ctx.stroke();
+  ctx.strokeStyle = rgba(COLORS.line, 0.95);
+  ctx.lineWidth = 1.5;
+  roundedRect(ctx, 20, 58, 1240, 642, 20); ctx.stroke();
+  ctx.strokeStyle = rgba(COLORS.purple, 0.35);
+  roundedRect(ctx, 35, 74, 1210, 610, 16); ctx.stroke();
+  const sweep = (t * 0.12) % 1500 - 150;
+  const g = ctx.createLinearGradient(sweep - 160, 0, sweep + 160, 0);
+  g.addColorStop(0, rgba(COLORS.purple, 0));
+  g.addColorStop(0.5, rgba(COLORS.cyan, 0.25));
+  g.addColorStop(1, rgba(COLORS.purple, 0));
+  ctx.strokeStyle = g; ctx.lineWidth = 2;
+  roundedRect(ctx, 35, 74, 1210, 610, 16); ctx.stroke();
   ctx.restore();
 }
 
-function drawReactor(ctx, cx, cy, radius, progress, time, celebration = false) {
+async function drawLogo(ctx) {
+  try {
+    const logo = await loadImage(await fs.readFile(LOGO));
+    ctx.save();
+    ctx.globalAlpha = 0.98;
+    ctx.shadowColor = COLORS.purple;
+    ctx.shadowBlur = 24;
+    ctx.drawImage(logo, 62, 176, 300, 300);
+    ctx.restore();
+  } catch {
+    text(ctx, 'BOZOS', 212, 300, 50, COLORS.purpleBright, 'center', '800');
+    text(ctx, 'TTS', 212, 352, 34, COLORS.cyan, 'center', '800');
+  }
+}
+
+function drawHeader(ctx, celebration) {
   ctx.save();
-  ctx.translate(cx, cy);
+  glow(ctx, COLORS.purple, 18);
+  text(ctx, celebration ? 'BOZOS TTS — 100 SERVERS' : 'BOZOS TTS — ROAD TO 100', 640, 38, 31, COLORS.white, 'center', '800');
+  ctx.shadowBlur = 0;
+  text(ctx, celebration ? 'MILESTONE UNLOCKED' : 'LIVE ANIMATED MILESTONE', 640, 76, 16, COLORS.cyan, 'center', '700');
+  ctx.restore();
+}
 
-  const pulse = 1 + Math.sin(time * 0.006) * 0.018;
-  ctx.scale(pulse, pulse);
+function drawReactor(ctx, servers, t, celebration) {
+  const cx = 575, cy = 365, base = 145;
+  const progress = Math.min(servers / TARGET, 1);
+  const angle = t * (celebration ? 0.012 : 0.0045);
 
-  // Outer aura.
-  const aura = ctx.createRadialGradient(0, 0, radius * 0.35, 0, 0, radius * 1.45);
-  aura.addColorStop(0, 'rgba(168,85,247,0.20)');
-  aura.addColorStop(0.55, 'rgba(34,211,238,0.06)');
-  aura.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = aura;
-  ctx.beginPath();
-  ctx.arc(0, 0, radius * 1.45, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.save(); ctx.translate(cx, cy);
+  const pulse = 1 + Math.sin(t * 0.004) * 0.018; ctx.scale(pulse, pulse);
 
-  // Rotating segmented reactor.
-  const segments = 64;
-  const start = -Math.PI / 2 + time * 0.00035;
+  const aura = ctx.createRadialGradient(0, 0, 40, 0, 0, 230);
+  aura.addColorStop(0, rgba(COLORS.purple, celebration ? 0.30 : 0.14));
+  aura.addColorStop(0.48, rgba(COLORS.cyan, 0.07));
+  aura.addColorStop(1, rgba(COLORS.purple, 0));
+  ctx.fillStyle = aura; ctx.beginPath(); ctx.arc(0, 0, 230, 0, TAU); ctx.fill();
+
+  for (let ring = 0; ring < 3; ring++) {
+    ctx.save(); ctx.rotate(angle * (ring % 2 ? -0.6 : 1));
+    ctx.lineWidth = ring === 0 ? 9 : 3;
+    ctx.strokeStyle = ring === 0 ? rgba(COLORS.purpleBright, 0.9) : rgba(COLORS.cyan, 0.34);
+    glow(ctx, ring === 0 ? COLORS.purple : COLORS.cyan, ring === 0 ? 22 : 7);
+    ctx.beginPath(); ctx.arc(0, 0, base + ring * 18, ring * 0.55, TAU - ring * 0.42); ctx.stroke();
+    ctx.restore();
+  }
+
+  const segments = 72;
+  const active = Math.round(progress * segments);
   for (let i = 0; i < segments; i++) {
-    const a0 = start + (i / segments) * Math.PI * 2;
-    const a1 = a0 + (Math.PI * 2 / segments) * 0.72;
-    const active = i / segments < progress;
-    ctx.beginPath();
-    ctx.arc(0, 0, radius, a0, a1);
-    ctx.strokeStyle = active ? (i % 4 === 0 ? COLORS.cyan : COLORS.purpleBright) : '#1e1a3c';
-    ctx.lineWidth = i % 5 === 0 ? 10 : 6;
-    ctx.shadowBlur = active ? 18 : 0;
-    ctx.shadowColor = active ? COLORS.purple : 'transparent';
-    ctx.stroke();
+    const a = -Math.PI / 2 + i * TAU / segments;
+    const on = i < active;
+    ctx.save(); ctx.rotate(a);
+    ctx.fillStyle = on ? (i % 4 === 0 ? rgba(COLORS.cyan, 0.98) : rgba(COLORS.purpleBright, 0.94)) : rgba('#34395f', 0.42);
+    ctx.shadowColor = on ? COLORS.purple : 'transparent'; ctx.shadowBlur = on ? 10 + 8 * (0.5 + 0.5 * Math.sin(t * 0.009 - i)) : 0;
+    ctx.fillRect(base - 4, -3, 18, 6); ctx.restore();
   }
 
-  ctx.beginPath();
-  ctx.arc(0, 0, radius * 0.82, 0, Math.PI * 2);
-  ctx.strokeStyle = '#31265f';
-  ctx.lineWidth = 5;
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.arc(0, 0, radius * 0.68, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(96,165,250,0.28)';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // Energy ticks.
-  for (let i = 0; i < 24; i++) {
-    const a = (i / 24) * Math.PI * 2 - time * 0.00025;
-    const inner = radius * 1.08;
-    const outer = radius * (1.08 + (i % 3 === 0 ? 0.09 : 0.04));
-    ctx.beginPath();
-    ctx.moveTo(Math.cos(a) * inner, Math.sin(a) * inner);
-    ctx.lineTo(Math.cos(a) * outer, Math.sin(a) * outer);
-    ctx.strokeStyle = i % 2 ? COLORS.violet : COLORS.cyan;
-    ctx.globalAlpha = 0.5;
-    ctx.lineWidth = 2;
-    ctx.stroke();
+  ctx.save(); ctx.rotate(-angle * 0.55);
+  for (let i = 0; i < 36; i++) {
+    const a = i * TAU / 36;
+    ctx.save(); ctx.rotate(a); ctx.fillStyle = rgba(i % 3 ? COLORS.purple : COLORS.cyan, 0.42); ctx.fillRect(104, -1, i % 3 ? 8 : 13, 2); ctx.restore();
   }
+  ctx.restore();
+
+  const arcs = celebration ? 12 : 4;
+  for (let i = 0; i < arcs; i++) {
+    const p = (t * 0.0012 + i * 0.23) % 1;
+    const a1 = -Math.PI / 2 + p * TAU;
+    ctx.strokeStyle = i % 2 ? rgba(COLORS.cyan, 0.75) : rgba(COLORS.purpleBright, 0.75);
+    ctx.lineWidth = 2; glow(ctx, i % 2 ? COLORS.cyan : COLORS.purple, 12);
+    ctx.beginPath(); ctx.arc(0, 0, base + 9, a1, a1 + 0.12 + 0.06 * Math.sin(i * 9.1)); ctx.stroke();
+  }
+
+  ctx.shadowColor = COLORS.purpleBright; ctx.shadowBlur = celebration ? 42 : 24;
+  text(ctx, String(servers), 0, -2, servers === 100 ? 112 : 122, COLORS.white, 'center', '800');
+  ctx.shadowBlur = 0; text(ctx, 'SERVERS', 0, 70, 22, COLORS.white, 'center', '700');
+  ctx.restore();
+}
+
+function drawRightPanel(ctx, servers, t, celebration) {
+  const x = 800, y = 160, w = 400, h = 390;
+  ctx.save();
+  ctx.fillStyle = rgba(COLORS.panel, 0.82); ctx.strokeStyle = rgba(COLORS.cyan, 0.30); ctx.lineWidth = 1.5;
+  roundedRect(ctx, x, y, w, h, 18); ctx.fill(); ctx.stroke();
 
   if (celebration) {
-    ctx.globalAlpha = 0.75;
-    for (let i = 0; i < 18; i++) {
-      const a = (i / 18) * Math.PI * 2 + time * 0.001;
-      const len = radius * (0.55 + ((i * 17) % 100) / 140);
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * radius * 1.12, Math.sin(a) * radius * 1.12);
-      ctx.lineTo(Math.cos(a) * (radius * 1.12 + len), Math.sin(a) * (radius * 1.12 + len));
-      ctx.strokeStyle = i % 2 ? COLORS.purpleBright : COLORS.cyan;
-      ctx.lineWidth = 3;
-      ctx.stroke();
-    }
-  }
+    glow(ctx, COLORS.purpleBright, 28);
+    text(ctx, 'MILESTONE UNLOCKED!', x + w / 2, y + 65, 29, COLORS.purpleBright, 'center', '800');
+    text(ctx, 'BOZOS TTS HAS REACHED', x + w / 2, y + 128, 19, COLORS.white);
+    text(ctx, '100 SERVERS!', x + w / 2, y + 165, 32, COLORS.cyan, 'center', '800');
+    text(ctx, 'MORE VOICES  •  MORE CONNECTIONS  •  MORE BOZOS', x + w / 2, y + 228, 13, COLORS.muted);
+    text(ctx, 'THANK YOU FOR BEING PART OF THE JOURNEY! 💜', x + w / 2, y + 304, 16, COLORS.white);
+  } else {
+    const critical = servers === 99;
+    const heading = critical ? 'ONE SERVER AWAY' : `${TARGET - servers} SERVERS TO GO`;
+    const sub = critical ? 'FROM 100!' : 'THE BOZOS ARE GETTING LOUDER…';
+    const breathe = 0.78 + 0.22 * (0.5 + 0.5 * Math.sin(t * 0.003));
+    ctx.globalAlpha = breathe;
+    text(ctx, heading, x + 24, y + 75, 28, COLORS.purpleBright, 'left', '800');
+    ctx.globalAlpha = 1;
+    text(ctx, sub, x + 24, y + 115, 26, COLORS.white, 'left', '800');
+    text(ctx, `NEXT SERVER  →  ${TARGET}`, x + 24, y + 173, 18, COLORS.white, 'left', '700');
 
+    const bx = x + 24, by = y + 205, bw = w - 48, bh = 22;
+    ctx.fillStyle = '#10152a'; ctx.strokeStyle = rgba(COLORS.cyan, 0.55); roundedRect(ctx, bx, by, bw, bh, 11); ctx.fill(); ctx.stroke();
+    const pg = ctx.createLinearGradient(bx, 0, bx + bw, 0); pg.addColorStop(0, COLORS.purpleBright); pg.addColorStop(1, COLORS.cyan);
+    roundedRect(ctx, bx + 2, by + 2, (bw - 4) * Math.min(servers / TARGET, 1), bh - 4, 9);
+    ctx.fillStyle = pg; ctx.shadowColor = COLORS.purple; ctx.shadowBlur = 14; ctx.fill(); ctx.shadowBlur = 0;
+    text(ctx, 'AUTOMATICALLY UPDATES WHEN THE COUNT CHANGES', x + w / 2, y + 292, 12, COLORS.cyan);
+    text(ctx, critical ? 'THE NEXT SERVER CHANGES EVERYTHING.' : 'SPREADING VOICES. CONNECTING WORLDS.', x + w / 2, y + 332, 14, COLORS.muted);
+  }
   ctx.restore();
 }
 
-function drawParticles(ctx, time, celebration = false) {
-  const count = celebration ? 95 : 42;
-  ctx.save();
+function drawParticles(ctx, t, celebration) {
+  const count = celebration ? 170 : 60;
   for (let i = 0; i < count; i++) {
-    const seed = i * 91.73;
-    const x = ((seed * 7.13) % WIDTH + WIDTH) % WIDTH;
-    const baseY = ((seed * 3.71) % HEIGHT + HEIGHT) % HEIGHT;
-    const drift = Math.sin(time * 0.0007 + i) * (celebration ? 90 : 22);
-    const y = (baseY + time * (celebration ? 0.025 : 0.006) + drift) % HEIGHT;
+    const seed = i * 13.173;
+    const a = seed % TAU;
+    const radius = celebration ? ((t * (0.05 + (seed % 17) / 180) + seed * 20) % 500) : ((seed * 20 + t * 0.012) % 430);
+    const x = 575 + Math.cos(a) * radius;
+    const y = 365 + Math.sin(a) * radius * 0.55;
     const size = celebration ? 2 + (i % 4) : 1 + (i % 3);
-    ctx.globalAlpha = celebration ? 0.55 : 0.25;
-    ctx.fillStyle = i % 3 === 0 ? COLORS.cyan : COLORS.purpleBright;
-    ctx.fillRect(x, y, size, size);
+    ctx.globalAlpha = celebration ? Math.max(0, 1 - radius / 510) * 0.9 : 0.28;
+    ctx.fillStyle = i % 3 === 0 ? COLORS.cyan : i % 3 === 1 ? COLORS.purpleBright : COLORS.white;
+    ctx.fillRect(x, y, size, size * (1 + (i % 3)));
   }
-  ctx.restore();
+  ctx.globalAlpha = 1;
 }
 
-export function renderMilestone({ servers = 99, time = 0, celebration = false } = {}) {
+export async function renderFrame({ servers = 99, time = 0, celebration = false }) {
   const canvas = createCanvas(WIDTH, HEIGHT);
   const ctx = canvas.getContext('2d');
-  const progress = Math.min(servers / MILESTONE, 1);
-
   drawBackground(ctx, time);
-  drawParticles(ctx, time, celebration);
+  drawFrame(ctx, time);
+  drawHeader(ctx, celebration);
+  await drawLogo(ctx);
+  if (celebration) drawParticles(ctx, time, true);
+  drawReactor(ctx, servers, time, celebration);
+  drawRightPanel(ctx, servers, time, celebration);
 
-  // Main frame.
-  drawPanel(ctx, 32, 30, WIDTH - 64, HEIGHT - 60);
-
-  // Header capsule.
-  roundedRect(ctx, 350, 52, 580, 68, 22);
-  ctx.fillStyle = '#0b0b18';
-  ctx.fill();
-  ctx.strokeStyle = COLORS.purple;
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  glowText(ctx, 'BOZOS TTS — ROAD TO 100', WIDTH / 2, 86, 31, COLORS.purpleBright);
-
-  ctx.font = '700 18px Arial';
-  ctx.textAlign = 'center';
-  ctx.fillStyle = COLORS.cyan;
-  ctx.fillText(celebration ? 'MILESTONE UNLOCKED' : servers >= 99 ? 'LIVE ANIMATED MILESTONE' : 'LIVE SERVER COUNT', WIDTH / 2, 145);
-
-  // Left logo zone / brand mark.
-  drawPanel(ctx, 62, 188, 260, 390);
-  glowText(ctx, 'BOZOS', 192, 310, 45, COLORS.purpleBright);
-  glowText(ctx, 'TTS', 192, 360, 36, COLORS.cyan);
-  ctx.font = '700 14px Arial';
-  ctx.fillStyle = COLORS.muted;
-  ctx.fillText('VOICE • ENERGY • CHAOS', 192, 405);
-  ctx.strokeStyle = COLORS.purple;
-  ctx.globalAlpha = 0.65;
-  ctx.beginPath();
-  ctx.moveTo(112, 445);
-  for (let x = 112; x <= 272; x += 8) {
-    const y = 445 + Math.sin(x * 0.19 + time * 0.01) * 14;
-    ctx.lineTo(x, y);
-  }
-  ctx.stroke();
-  ctx.globalAlpha = 1;
-
-  // Main reactor.
-  const reactorX = 600;
-  const reactorY = 370;
-  drawReactor(ctx, reactorX, reactorY, 142, progress, time, celebration);
-
-  const number = String(servers);
-  glowText(ctx, number, reactorX, reactorY - 12, celebration ? 92 : 86, COLORS.purpleBright);
-  ctx.font = '800 22px Arial';
-  ctx.fillStyle = COLORS.white;
-  ctx.textAlign = 'center';
-  ctx.fillText('SERVERS', reactorX, reactorY + 62);
-
-  // Right-side messaging.
-  const rx = 785;
-  if (celebration) {
-    glowText(ctx, '100 SERVERS', rx + 150, 255, 43, COLORS.cyan);
-    glowText(ctx, 'MILESTONE UNLOCKED', rx + 150, 315, 35, COLORS.purpleBright);
-    ctx.font = '700 20px Arial';
-    ctx.fillStyle = COLORS.white;
-    ctx.textAlign = 'center';
-    ctx.fillText('BOZOS TTS HAS REACHED 100 SERVERS!', rx + 150, 365);
-    ctx.font = '600 17px Arial';
-    ctx.fillStyle = COLORS.muted;
-    ctx.fillText('MORE VOICES  •  MORE CONNECTIONS  •  MORE BOZOS', rx + 150, 408);
-  } else {
-    const critical = servers >= 99;
-    glowText(ctx, critical ? 'ONE SERVER AWAY' : `${MILESTONE - servers} SERVERS TO GO`, rx + 150, 250, 37, COLORS.purpleBright);
-    glowText(ctx, critical ? 'FROM 100!' : 'THE BOZOS ARE GETTING LOUDER', rx + 150, 300, 30, COLORS.white);
-
-    roundedRect(ctx, rx, 352, 330, 54, 18);
-    ctx.fillStyle = '#070a13';
-    ctx.fill();
-    ctx.strokeStyle = COLORS.line;
-    ctx.stroke();
-    const bar = ctx.createLinearGradient(rx + 12, 0, rx + 318, 0);
-    bar.addColorStop(0, COLORS.purpleBright);
-    bar.addColorStop(1, COLORS.cyan);
-    roundedRect(ctx, rx + 12, 364, 306 * progress, 30, 14);
-    ctx.fillStyle = bar;
-    ctx.shadowBlur = 18;
-    ctx.shadowColor = COLORS.purple;
-    ctx.fill();
-    ctx.shadowBlur = 0;
-
-    ctx.font = '700 17px Arial';
-    ctx.fillStyle = COLORS.muted;
-    ctx.textAlign = 'left';
-    ctx.fillText(`${servers} / ${MILESTONE} SERVERS`, rx, 445);
-  }
-
-  // Footer.
-  ctx.strokeStyle = COLORS.line;
-  ctx.beginPath();
-  ctx.moveTo(72, 610);
-  ctx.lineTo(WIDTH - 72, 610);
-  ctx.stroke();
-  ctx.font = '700 16px Arial';
-  ctx.fillStyle = COLORS.muted;
-  ctx.textAlign = 'center';
-  ctx.fillText(celebration ? 'THANK YOU FOR BEING PART OF THE JOURNEY. 💜' : 'THE BOZOS ARE GETTING LOUDER…', WIDTH / 2, 650);
-
+  ctx.strokeStyle = rgba(COLORS.purple, 0.28); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(48, 590); ctx.lineTo(1232, 590); ctx.stroke();
+  text(ctx, `${Math.min(servers, TARGET)} / ${TARGET} SERVERS`, 160, 625, 16, COLORS.muted);
+  text(ctx, celebration ? 'MORE VOICES  •  MORE CONNECTIONS  •  MORE BOZOS' : 'SPREADING VOICES. CONNECTING WORLDS.', 640, 625, 15, COLORS.muted);
+  text(ctx, 'POWERED BY BOZOS TTS', 1080, 625, 15, COLORS.muted);
+  text(ctx, celebration ? 'THANK YOU. 💜' : 'THE BOZOS ARE GETTING LOUDER…', 640, 662, 15, celebration ? COLORS.purpleBright : COLORS.cyan, 'center', '700');
   return canvas;
 }
