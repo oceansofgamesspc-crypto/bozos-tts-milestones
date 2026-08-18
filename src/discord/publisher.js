@@ -44,7 +44,7 @@ function payload({ content, filename, editing = false }) {
     embeds: [{
       color: 0xa855f7,
       image: { url: `attachment://${filename}` },
-      footer: { text: 'BOZOS TTS • 100 SERVER MILESTONE' }
+      footer: { text: 'BOZOS TTS - 100 SERVER MILESTONE' }
     }],
     ...(editing ? { attachments: [{ id: '0', filename }] } : {})
   };
@@ -53,7 +53,7 @@ function payload({ content, filename, editing = false }) {
 export async function createMessage({ token, channelId, buffer, filename, content }) {
   const form = new FormData();
   form.append('payload_json', JSON.stringify(payload({ content, filename })));
-  form.append('files[0]', new Blob([buffer], { type: 'image/gif' }), filename);
+  form.append('files[0]', new Blob([buffer], { type: 'image/webp' }), filename);
   const response = await discordFetch(token, `/channels/${channelId}/messages`, {
     method: 'POST',
     body: form
@@ -64,7 +64,7 @@ export async function createMessage({ token, channelId, buffer, filename, conten
 export async function editMessage({ token, channelId, messageId, buffer, filename, content }) {
   const form = new FormData();
   form.append('payload_json', JSON.stringify(payload({ content, filename, editing: true })));
-  form.append('files[0]', new Blob([buffer], { type: 'image/gif' }), filename);
+  form.append('files[0]', new Blob([buffer], { type: 'image/webp' }), filename);
   const response = await discordFetch(token, `/channels/${channelId}/messages/${messageId}`, {
     method: 'PATCH',
     body: form
