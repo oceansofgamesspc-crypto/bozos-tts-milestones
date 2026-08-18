@@ -34,6 +34,7 @@ async function publishCount(count, messageId) {
 
   if (messageId) {
     await editMessage({ token: config.token, channelId: config.channelId, messageId, buffer, filename, content });
+    console.log(`[publish] Updated milestone message ${messageId} -> ${count}/100.`);
     return messageId;
   }
 
@@ -44,15 +45,18 @@ async function publishCount(count, messageId) {
 }
 
 async function tick(state) {
+  const checkedAt = new Date().toISOString();
   const count = config.testMode && Number.isInteger(config.testServers)
     ? config.testServers
     : await fetchServerCount(config.token);
+
+  console.log(`[poll] ${checkedAt} | Discord server count = ${count} | previous = ${state.lastCount ?? 'none'}`);
 
   // A prior 100 celebration is permanent. Before 100, always keep the live board current.
   if (state.celebrated) return state;
   if (state.lastCount === count && state.messageId) return state;
 
-  console.log(`Bozos TTS server count: ${count}`);
+  console.log(`Bozos TTS server count changed: ${state.lastCount ?? 'none'} -> ${count}`);
   state.messageId = await publishCount(Math.min(count, TARGET), state.messageId);
   state.lastCount = count;
   state.celebrated = count >= TARGET;
@@ -67,7 +71,17 @@ let state = await readState();
 console.log('Bozos TTS 100-server milestone service online.');
 await tick(state);
 
-setInterval(async () => {
-  try { state = await tick(state); }
-  catch (error) { console.error('[milestone]', error); }
-}, config.refreshMs);
+// Use a self-scheduling loop instead of setInterval. If Discord or rendering ever
+// takes longer than expected, polls cannot overlap and one failed poll cannot
+// silently kill the update loop.
+async function pollLoop() {
+  try {
+    state = await tick(state);
+  } catch (error) {
+    console.error('[milestone] Poll failed:', error);
+  } finally {
+    setTimeout(pollLoop, config.refreshMs);
+  }
+}
+
+setTimeout(pollLoop, config.refreshMs);
