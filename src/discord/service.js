@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { config, TARGET, assertDiscordConfig } from '../config.js';
+import { config, TARGET, DISCORD_BADGE_EMOJI, assertDiscordConfig } from '../config.js';
 import { renderGif } from '../animation/gif.js';
 import { createMessage, editMessage, fetchServerCount, verifyChannel } from './publisher.js';
 
@@ -29,8 +29,8 @@ async function publishCount(count, messageId) {
   const buffer = await buildAnimation(count);
   const filename = count >= TARGET ? 'bozos-100.webp' : 'bozos-road-to-100.webp';
   const content = count >= TARGET
-    ? 'BOZOS TTS HAS REACHED 100 SERVERS!'
-    : `BOZOS TTS - ROAD TO 100 - ${count}/100 servers`;
+    ? `${DISCORD_BADGE_EMOJI} **BOZOS TTS HAS REACHED 100 SERVERS!**`
+    : `${DISCORD_BADGE_EMOJI} **BOZOS TTS — ROAD TO 100** • ${count}/100 servers`;
 
   if (messageId) {
     await editMessage({ token: config.token, channelId: config.channelId, messageId, buffer, filename, content });
