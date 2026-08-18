@@ -1,9 +1,14 @@
 import 'dotenv/config';
 
-// Render at the authored design size. Discord now supports animated WebP,
-// which lets us keep the 1280x720 visual sharp without GIF's 256-color limit.
+// Keep the authored 1280x720 canvas. Discord animated WebP gives us much
+// better quality than GIF for the neon gradients and glows.
+export const DESIGN_WIDTH = 1280;
+export const DESIGN_HEIGHT = 720;
 export const WIDTH = 1280;
 export const HEIGHT = 720;
+// Compatibility aliases for the animation encoder.
+export const OUTPUT_WIDTH = WIDTH;
+export const OUTPUT_HEIGHT = HEIGHT;
 export const FPS = 8;
 export const TARGET = 100;
 export const MAX_UPLOAD_BYTES = 9_000_000;
@@ -22,6 +27,8 @@ export const COLORS = {
   dim: '#51577b',
   line: '#252052'
 };
+
+export const DISCORD_BADGE_EMOJI = '<a:badge:1525875105605882047>';
 
 export const config = {
   token: process.env.DISCORD_TOKEN || '',
