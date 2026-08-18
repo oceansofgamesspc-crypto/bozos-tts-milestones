@@ -1,11 +1,9 @@
 import 'dotenv/config';
 
-// Keep the authored design grid intact; animation/gif.js downsizes frames
-// before encoding so Discord receives a compact 16:9 asset.
+// Render at the authored design size. Discord now supports animated WebP,
+// which lets us keep the 1280x720 visual sharp without GIF's 256-color limit.
 export const WIDTH = 1280;
 export const HEIGHT = 720;
-export const OUTPUT_WIDTH = 854;
-export const OUTPUT_HEIGHT = 480;
 export const FPS = 8;
 export const TARGET = 100;
 export const MAX_UPLOAD_BYTES = 9_000_000;
