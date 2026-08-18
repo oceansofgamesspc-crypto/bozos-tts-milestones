@@ -6,8 +6,11 @@ async function discordFetch(token, endpoint, options = {}) {
     headers: {
       Authorization: `Bot ${token}`,
       ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+      'Cache-Control': 'no-cache',
+      Pragma: 'no-cache',
       ...(options.headers || {})
-    }
+    },
+    cache: 'no-store'
   });
   if (!response.ok) {
     const body = await response.text();
@@ -28,11 +31,19 @@ export async function verifyChannel({ token, guildId, channelId }) {
 export async function fetchServerCount(token) {
   let after = '0';
   let total = 0;
+  let pages = 0;
+
   while (true) {
+    pages += 1;
     const response = await discordFetch(token, `/users/@me/guilds?limit=200&after=${after}`);
     const guilds = await response.json();
     total += guilds.length;
-    if (guilds.length < 200) return total;
+
+    if (guilds.length < 200) {
+      console.log(`[guild-count] Discord returned ${total} servers across ${pages} page${pages === 1 ? '' : 's'}.`);
+      return total;
+    }
+
     after = guilds[guilds.length - 1].id;
   }
 }
