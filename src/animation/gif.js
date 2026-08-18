@@ -1,53 +1,85 @@
 import fs from 'node:fs/promises';
-import { createCanvas } from 'canvas';
-import GIFEncoder from 'gif-encoder-2';
-import { FPS, WIDTH, HEIGHT, OUTPUT_WIDTH, OUTPUT_HEIGHT, MAX_UPLOAD_BYTES } from '../config.js';
+import sharp from 'sharp';
+import { FPS, WIDTH, HEIGHT, MAX_UPLOAD_BYTES } from '../config.js';
 import { renderFrame } from '../render/renderer.js';
 
-async function encodeFrames(frames, width, height) {
-  const encoder = new GIFEncoder(width, height, 'neuquant', true);
-  encoder.setDelay(Math.round(1000 / FPS));
-  encoder.setRepeat(0);
-  encoder.setQuality(8);
-  encoder.start();
-
-  const canvas = createCanvas(width, height);
-  const ctx = canvas.getContext('2d');
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-
+async function encodeAnimatedWebP(frames) {
+  // Convert Canvas output to RGBA and stack frames vertically. Sharp can then
+  // treat the tall raw image as a multi-page animation and encode it as WebP.
+  const rawFrames = [];
   for (const frame of frames) {
-    ctx.clearRect(0, 0, width, height);
-    ctx.drawImage(frame, 0, 0, WIDTH, HEIGHT, 0, 0, width, height);
-    encoder.addFrame(ctx);
+    const png = frame.toBuffer('image/png');
+    const raw = await sharp(png).ensureAlpha().raw().toBuffer();
+    rawFrames.push(raw);
   }
 
-  encoder.finish();
-  return encoder.out.getData();
+  const stacked = Buffer.concat(rawFrames);
+  const delay = new Array(frames.length).fill(Math.round(1000 / FPS));
+
+  return sharp(stacked, {
+    raw: {
+      width: WIDTH,
+      height: HEIGHT * frames.length,
+      channels: 4,
+      pageHeight: HEIGHT
+    }
+  })
+    .webp({ quality: 88, effort: 6, loop: 0, delay })
+    .toBuffer();
 }
 
 export async function renderGif({ servers, celebration, output }) {
-  // Keep the authored renderer at 1280x720, then encode a compact Discord
-  // version. Celebration animations are intentionally shorter to control size.
-  const frameCount = celebration ? 60 : 40;
+  // 5 seconds for the live state, 6.5 seconds for the 100-server event.
+  // WebP keeps the full 1280x720 canvas and avoids GIF's 256-color ceiling.
+  const frameCount = celebration ? 52 : 40;
   const frames = [];
 
   for (let i = 0; i < frameCount; i++) {
     const t = i * (1000 / FPS);
-    const value = celebration ? (i < 10 ? 99 : 100) : servers;
-    frames.push(await renderFrame({ servers: value, time: t, celebration }));
+    let value = servers;
+    let isCelebration = false;
+
+    if (celebration) {
+      // First 1.5 seconds: 99 charging. Then slam into 100 and celebrate.
+      if (i < 12) {
+        value = 99;
+        isCelebration = false;
+      } else {
+        value = 100;
+        isCelebration = true;
+      }
+    }
+
+    frames.push(await renderFrame({
+      servers: value,
+      time: t,
+      celebration: isCelebration
+    }));
   }
 
-  let data = await encodeFrames(frames, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+  let data = await encodeAnimatedWebP(frames);
 
-  // Discord rejects oversized multipart bodies. If the first encode is still
-  // too large, fall back to 640x360 without sacrificing the 16:9 composition.
+  // If an unusually large render exceeds the standard non-Nitro upload limit,
+  // lower quality before sacrificing resolution. WebP is specifically used
+  // here because Discord supports animated WebP attachments/embeds and it
+  // preserves far more color/detail than GIF.
   if (data.length > MAX_UPLOAD_BYTES) {
-    data = await encodeFrames(frames, 640, 360);
+    const rawFrames = [];
+    for (const frame of frames) {
+      const raw = await sharp(frame.toBuffer('image/png')).ensureAlpha().raw().toBuffer();
+      rawFrames.push(raw);
+    }
+    const stacked = Buffer.concat(rawFrames);
+    const delay = new Array(frames.length).fill(Math.round(1000 / FPS));
+    data = await sharp(stacked, {
+      raw: { width: WIDTH, height: HEIGHT * frames.length, channels: 4, pageHeight: HEIGHT }
+    })
+      .webp({ quality: 72, effort: 6, loop: 0, delay })
+      .toBuffer();
   }
 
   if (data.length > MAX_UPLOAD_BYTES) {
-    throw new Error(`Generated milestone GIF is ${data.length} bytes, still above ${MAX_UPLOAD_BYTES} bytes after compression.`);
+    throw new Error(`Generated animated WebP is ${(data.length / 1024 / 1024).toFixed(2)} MiB, above the ${MAX_UPLOAD_BYTES / 1024 / 1024} MiB safety limit.`);
   }
 
   await fs.writeFile(output, data);
