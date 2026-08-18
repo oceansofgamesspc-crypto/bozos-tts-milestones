@@ -5,14 +5,17 @@
   "description": "Standalone animated visual milestone for the Bozos TTS 100-server moment.",
   "type": "module",
   "scripts": {
+    "preview:98": "node src/index.js --state=98",
     "preview:99": "node src/index.js --state=99",
     "preview:100": "node src/index.js --state=100",
-    "preview:98": "node src/index.js --state=98"
+    "animate:99": "node src/animation/generate.js --state=99",
+    "animate:100": "node src/animation/generate.js --state=100"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
-    "canvas": "^3.1.2"
+    "canvas": "^3.1.2",
+    "gif-encoder-2": "^1.0.5"
   }
 }
