@@ -1,21 +1,22 @@
 {
   "name": "bozos-tts-milestones",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "Standalone animated visual milestone for the Bozos TTS 100-server moment.",
+  "description": "The Bozos TTS 100-server animated milestone.",
   "type": "module",
   "scripts": {
     "preview:98": "node src/index.js --state=98",
     "preview:99": "node src/index.js --state=99",
     "preview:100": "node src/index.js --state=100",
-    "animate:99": "node src/animation/generate.js --state=99",
-    "animate:100": "node src/animation/generate.js --state=100"
+    "start": "node src/service.js"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
     "canvas": "^3.1.2",
+    "discord.js": "^14.27.0",
+    "dotenv": "^17.2.1",
     "gif-encoder-2": "^1.0.5"
   }
 }
