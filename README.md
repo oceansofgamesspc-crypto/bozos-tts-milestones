@@ -2,44 +2,46 @@
 
 A standalone visual milestone engine for the **Bozos TTS 100-server moment**.
 
-> This project is intentionally scoped to **100 servers only**. No generic milestone framework yet.
+> **Scope:** 100 servers only. This is the special event project, not a generic milestone framework.
 
 ## Creative direction
 
-The visual language follows the provided Bozos TTS reference:
+The supplied Bozos TTS artwork is the design bible:
 
 - dark futuristic HUD
 - electric purple + cyan neon
 - circular audio/reactor ring
-- premium typography
-- subtle ambient particles and scan effects
-- animated 99-server critical state
-- cinematic 99 → 100 celebration
-- restrained, polished motion rather than noisy Discord GIF effects
+- premium, high-contrast typography
+- subtle ambient particles, scan sweeps and electrical arcs
+- a tense 99-server critical state
+- cinematic 99 → 100 transition
+- a polished 100-server celebration
 
 ## Runtime states
 
-1. **ROAD TO 100** — live animated tracker below 99.
-2. **ONE SERVER AWAY** — special 99-server animation.
-3. **MILESTONE UNLOCKED** — one-shot 100-server celebration.
-4. **100 SERVERS** — calm post-celebration loop.
+1. **ROAD TO 100** — live animated tracker.
+2. **ONE SERVER AWAY** — special 99-server state.
+3. **MILESTONE UNLOCKED** — 99 → 100 celebration.
+4. **100 SERVERS** — calm achieved-state loop.
 
 ## Project layout
 
 ```text
 src/
-  animation/       timing and frame generation
-  discord/         Discord publisher integration
-  render/          visual renderer
-  config.js        environment/config loading
-  index.js         CLI entry point
+  animation/gif.js      GIF frame pipeline
+  discord/publisher.js  Discord REST publisher
+  discord/service.js    Railway runtime
+  render/renderer.js    layered visual renderer
+  config.js             environment + animation constants
+  index.js              local preview CLI
 assets/
-  fonts/           optional local fonts
-  logo/            Bozos logo goes here
-output/             generated previews (gitignored)
+  logo/bozos-tts.png    supplied Bozos logo (add this binary asset)
+output/                  generated previews (gitignored)
+data/state.json         runtime message/count state (gitignored)
+railway.toml             Railway start configuration
 ```
 
-## Development
+## Local preview
 
 ```bash
 npm install
@@ -47,14 +49,60 @@ npm run preview:99
 npm run preview:100
 ```
 
-Generated previews are written to `output/`.
+Generated GIFs are written to `output/`.
 
-## Environment
+### Logo asset
 
-Copy `.env.example` to `.env` when wiring Discord publishing.
+Add the supplied 320×320 transparent PNG as:
 
-**Never commit a bot token.**
+```text
+assets/logo/bozos-tts.png
+```
 
-## Discord architecture
+The renderer has a text fallback if the file is absent.
 
-This repository is deliberately separate from the production Bozos TTS codebase. The milestone renderer is independent; Discord publishing can consume a server-count source later without duplicating the production bot's Gateway session.
+## Railway
+
+Create a Railway service from this repository and set:
+
+```text
+DISCORD_TOKEN=your_bot_token
+MILESTONE_GUILD_ID=your_friend_server_id
+MILESTONE_CHANNEL_ID=your_milestone_channel_id
+MILESTONE_MESSAGE_ID=
+REFRESH_INTERVAL_MS=300000
+```
+
+The **server ID is intentionally an environment variable**. You can change it in Railway without changing the repository.
+
+On first run the service creates one permanent milestone message in the configured channel and logs its message ID. Put that ID into `MILESTONE_MESSAGE_ID` afterward. Future count changes edit the same message rather than spamming the channel.
+
+For local testing:
+
+```text
+TEST_MODE=true
+TEST_SERVERS=99
+```
+
+or:
+
+```text
+TEST_MODE=true
+TEST_SERVERS=100
+```
+
+## Discord permissions
+
+The bot needs only the configured channel's relevant permissions:
+
+- View Channel
+- Send Messages
+- Embed Links
+- Attach Files
+- Read Message History
+
+No Administrator permission is required.
+
+## Safety
+
+Never commit `.env`, `DISCORD_TOKEN`, or any other credential. Runtime state is ignored by Git.
