@@ -10,8 +10,16 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const statePath = path.join(root, 'data', 'state.json');
 
 async function readState() {
-  try { return JSON.parse(await fs.readFile(statePath, 'utf8')); }
-  catch { return { lastCount: null, messageId: config.messageId || '', celebrated: false }; }
+  try {
+    const state = JSON.parse(await fs.readFile(statePath, 'utf8'));
+    return {
+      lastCount: state.lastCount ?? null,
+      messageIds: state.messageIds || {},
+      celebrated: Boolean(state.celebrated)
+    };
+  } catch {
+    return { lastCount: null, messageIds: {}, celebrated: false };
+  }
 }
 
 async function writeState(state) {
@@ -26,23 +34,45 @@ async function buildAnimation(count) {
   return fs.readFile(output);
 }
 
-async function publishCount(count, messageId) {
-  const buffer = await buildAnimation(count);
+async function publishDestination(destination, count, buffer, currentMessageId) {
   const filename = count >= TARGET ? 'bozos-100.webp' : 'bozos-road-to-100.webp';
   const content = count >= TARGET
     ? `${DISCORD_BADGE_EMOJI} **BOZOS TTS HAS REACHED 100 SERVERS!**`
     : `${DISCORD_BADGE_EMOJI} **BOZOS TTS — ROAD TO 100** • ${count}/100 servers`;
 
+  const messageId = destination.messageId || currentMessageId || '';
+
   if (messageId) {
-    await editMessage({ token: config.token, channelId: config.channelId, messageId, buffer, filename, content });
-    console.log(`[publish] Updated milestone message ${messageId} -> ${count}/100.`);
-    return messageId;
+    try {
+      await editMessage({ token: config.token, channelId: destination.channelId, messageId, buffer, filename, content });
+      console.log(`[publish:${destination.key}] Updated milestone message ${messageId} -> ${count}/100.`);
+      return messageId;
+    } catch (error) {
+      console.warn(`[publish:${destination.key}] Could not edit ${messageId}; creating a fresh milestone message.`, error.message);
+    }
   }
 
-  const message = await createMessage({ token: config.token, channelId: config.channelId, buffer, filename, content });
-  console.log(`Created milestone message: ${message.id}`);
-  console.log('Set MILESTONE_MESSAGE_ID to this value in Railway after confirming the channel.');
+  const message = await createMessage({ token: config.token, channelId: destination.channelId, buffer, filename, content });
+  console.log(`[publish:${destination.key}] Created milestone message: ${message.id}`);
+  console.log(`[publish:${destination.key}] Set MILESTONE_MESSAGE_ID${destination.key === '1' ? '' : `_${destination.key}`}=${message.id} in Railway.`);
   return message.id;
+}
+
+async function publishCount(count, state) {
+  // Render once, then reuse the exact same animation in every configured server.
+  const buffer = await buildAnimation(count);
+  const nextIds = { ...state.messageIds };
+
+  for (const destination of config.destinations) {
+    nextIds[destination.key] = await publishDestination(
+      destination,
+      count,
+      buffer,
+      state.messageIds[destination.key]
+    );
+  }
+
+  return nextIds;
 }
 
 function currentGuildCount(client) {
@@ -57,12 +87,15 @@ async function tick(state, client, reason = 'heartbeat') {
 
   console.log(`[poll:${reason}] ${checkedAt} | Discord gateway guild count = ${count} | previous = ${state.lastCount ?? 'none'}`);
 
-  // A prior 100 celebration is permanent. Before 100, always keep the live board current.
   if (state.celebrated) return state;
-  if (state.lastCount === count && state.messageId) return state;
+
+  const allMessagesKnown = config.destinations.every((destination) =>
+    Boolean(destination.messageId || state.messageIds[destination.key])
+  );
+  if (state.lastCount === count && allMessagesKnown) return state;
 
   console.log(`Bozos TTS server count changed: ${state.lastCount ?? 'none'} -> ${count}`);
-  state.messageId = await publishCount(Math.min(count, TARGET), state.messageId);
+  state.messageIds = await publishCount(Math.min(count, TARGET), state);
   state.lastCount = count;
   state.celebrated = count >= TARGET;
   await writeState(state);
@@ -70,9 +103,12 @@ async function tick(state, client, reason = 'heartbeat') {
 }
 
 assertDiscordConfig();
-await verifyChannel({ token: config.token, guildId: config.guildId, channelId: config.channelId });
-let state = await readState();
+for (const destination of config.destinations) {
+  await verifyChannel({ token: config.token, guildId: destination.guildId, channelId: destination.channelId });
+  console.log(`[destination:${destination.key}] Verified guild ${destination.guildId}, channel ${destination.channelId}.`);
+}
 
+let state = await readState();
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 let updateChain = Promise.resolve();
 
@@ -93,9 +129,6 @@ client.once(Events.ClientReady, async (readyClient) => {
   await queueUpdate('ready');
 });
 
-// These are the important events: unlike polling an HTTP endpoint, Discord tells
-// us immediately when the bot joins or leaves a guild. This keeps the milestone
-// board synchronized with the actual bot membership count.
 client.on(Events.GuildCreate, (guild) => {
   console.log(`[gateway] Joined server: ${guild.name} (${guild.id}). Cache now has ${client.guilds.cache.size} servers.`);
   queueUpdate('guildCreate');
@@ -106,25 +139,14 @@ client.on(Events.GuildDelete, (guild) => {
   queueUpdate('guildDelete');
 });
 
-client.on(Events.Error, (error) => {
-  console.error('[discord] Gateway error:', error);
-});
+client.on(Events.Error, (error) => console.error('[discord] Gateway error:', error));
+client.on(Events.ShardError, (error) => console.error('[discord] Shard error:', error));
 
-client.on(Events.ShardError, (error) => {
-  console.error('[discord] Shard error:', error);
-});
-
-console.log('Bozos TTS 100-server milestone service online.');
+console.log(`Bozos TTS 100-server milestone service online with ${config.destinations.length} destination(s).`);
+await client.login(config.token);
 
 if (config.testMode && Number.isInteger(config.testServers)) {
-  await client.login(config.token);
   await queueUpdate('test');
-} else {
-  await client.login(config.token);
 }
 
-// Heartbeat/reconciliation. Gateway events are the primary mechanism; this is a
-// safety net in case an event is missed during a reconnect or process hiccup.
-setInterval(() => {
-  queueUpdate('heartbeat');
-}, config.refreshMs);
+setInterval(() => queueUpdate('heartbeat'), config.refreshMs);
