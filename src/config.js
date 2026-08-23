@@ -1,7 +1,5 @@
 import 'dotenv/config';
 
-// Keep the authored 1280x720 canvas. Discord animated WebP gives us much
-// better quality than GIF for the neon gradients and glows.
 export const DESIGN_WIDTH = 1280;
 export const DESIGN_HEIGHT = 720;
 export const WIDTH = 1280;
@@ -29,19 +27,42 @@ export const COLORS = {
 
 export const DISCORD_BADGE_EMOJI = '<a:badge:1525875105605882047>';
 
+const destinations = [
+  {
+    key: '1',
+    guildId: process.env.MILESTONE_GUILD_ID || '',
+    channelId: process.env.MILESTONE_CHANNEL_ID || '',
+    messageId: process.env.MILESTONE_MESSAGE_ID || ''
+  },
+  {
+    key: '2',
+    guildId: process.env.MILESTONE_GUILD_ID_2 || '',
+    channelId: process.env.MILESTONE_CHANNEL_ID_2 || '',
+    messageId: process.env.MILESTONE_MESSAGE_ID_2 || ''
+  }
+].filter((destination) => destination.guildId || destination.channelId || destination.messageId);
+
 export const config = {
   token: process.env.DISCORD_TOKEN || '',
-  guildId: process.env.MILESTONE_GUILD_ID || '',
-  channelId: process.env.MILESTONE_CHANNEL_ID || '',
-  messageId: process.env.MILESTONE_MESSAGE_ID || '',
-  // One-minute polling keeps the milestone live without hammering Discord.
+  destinations,
   refreshMs: Math.max(15000, Number(process.env.REFRESH_INTERVAL_MS || 60000)),
   testServers: process.env.TEST_SERVERS ? Number(process.env.TEST_SERVERS) : null,
   testMode: process.env.TEST_MODE === 'true'
 };
 
 export function assertDiscordConfig() {
-  const missing = ['DISCORD_TOKEN', 'MILESTONE_GUILD_ID', 'MILESTONE_CHANNEL_ID']
-    .filter((key) => !process.env[key]);
-  if (missing.length) throw new Error(`Missing Railway environment variables: ${missing.join(', ')}`);
+  const missing = [];
+  if (!process.env.DISCORD_TOKEN) missing.push('DISCORD_TOKEN');
+  if (!process.env.MILESTONE_GUILD_ID) missing.push('MILESTONE_GUILD_ID');
+  if (!process.env.MILESTONE_CHANNEL_ID) missing.push('MILESTONE_CHANNEL_ID');
+
+  for (const destination of destinations) {
+    if (!destination.guildId || !destination.channelId) {
+      throw new Error(`Milestone destination ${destination.key} is incomplete. Both guild ID and channel ID are required.`);
+    }
+  }
+
+  if (missing.length) {
+    throw new Error(`Missing Railway environment variables: ${missing.join(', ')}`);
+  }
 }
